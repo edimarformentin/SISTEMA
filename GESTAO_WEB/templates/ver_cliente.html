@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}{{ cliente.nome }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="bi bi-person-circle"></i> {{ cliente.nome }}</h1>
+    <div>
+        <a href="/" class="btn btn-secondary"><i class="bi bi-arrow-left"></i> Voltar</a>
+        <a href="/cliente/{{ cliente.id }}/eventos" class="btn btn-info ms-2"><i class="bi bi-camera-reels"></i> Ver Eventos de IA</a>
+    </div>
+</div>
+<div class="row">
+    <div class="col-lg-7">
+        <!-- Card Dados do Cliente -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <strong>Dados do Cliente</strong>
+                <div>
+                    <a href="/cliente/{{ cliente.id }}/editar" class="btn btn-sm btn-outline-primary me-2" title="Editar"><i class="bi bi-pencil"></i></a>
+                    <form action="/cliente/{{ cliente.id }}/excluir" method="post" class="d-inline" onsubmit="return confirm('Tem certeza?');"><button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir"><i class="bi bi-trash"></i></button></form>
+                </div>
+            </div>
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item"><strong>ID Único:</strong> {{ cliente.unique_id }}</li>
+                <li class="list-group-item"><strong>CPF:</strong> {{ cliente.cpf }}</li>
+                <li class="list-group-item"><strong>E-mail:</strong> {{ cliente.email }}</li>
+                <li class="list-group-item"><strong>Endereço:</strong> {{ cliente.endereco }}</li>
+            </ul>
+        </div>
+        <!-- Card Gerenciamento -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header"><strong><i class="bi bi-record-circle-fill text-danger"></i> Gerenciamento de Gravação e IA</strong></div>
+            <div id="frigate-status-card" class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div><h6 class="card-title mb-1">Status dos Serviços</h6><span id="status-badge" class="badge fs-6">--</span></div>
+                    <span {% if not cliente.cameras %}data-bs-toggle="tooltip" title="Adicione câmeras para sincronizar."{% endif %}><button type="button" id="sync-button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#logModal" {% if not cliente.cameras %}disabled{% endif %}><i class="bi bi-arrow-repeat"></i> Sincronizar Serviços</button></span>
+                </div>
+                <div id="status-details"><p class="mb-1 small"><strong>Acesso Web (Gravação):</strong> <span id="frigate-link-span">--</span></p></div>
+            </div>
+        </div>
+        <!-- Card Câmeras -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header"><strong><i class="bi bi-camera"></i> Câmeras ({{ cliente.cameras|length }})</strong></div>
+            <div class="card-body">
+                {% if cliente.cameras %}
+                <ul class="list-group camera-list">
+                    {% for cam in cliente.cameras %}
+                    {% set cam_nome_sanitizado = cam.nome|replace(' ', '_')|replace('[^a-zA-Z0-9_-]', '') %}
+                    <li class="list-group-item camera-list__item">
+                        <div class="camera-list__row">
+                            <div class="camera-list__details">
+                                <span class="camera-list__name" data-bs-toggle="tooltip" title="{{ cam.observacao if cam.observacao else 'Sem observações' }}"><strong>{{ cam.nome }}</strong> ({{ cam.resolucao }})</span>
+                            </div>
+                            <div class="camera-list__actions">
+                                <div class="btn-group btn-group-sm">
+                                    <button class="btn btn-outline-success btn-play-stream" title="Ver Stream Ao Vivo" data-stream-url="/stream/{{ cliente.unique_id }}/{{ cam_nome_sanitizado }}/index.m3u8"><i class="bi bi-play-circle"></i></button>
+                                    <button class="btn btn-outline-secondary btn-copy-url" title="Copiar URL RTSP" onclick="const ta=document.createElement('textarea');ta.value='rtsp://{{request.url.hostname}}:8554/live/{{ cliente.unique_id }}/{{ cam_nome_sanitizado }}';document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);const o=this.innerHTML;this.innerHTML='<i class=\'bi bi-check-lg text-success\'></i>';this.disabled=true;setTimeout(()=>{this.innerHTML=o;this.disabled=false;},2000);"><i class="bi bi-clipboard"></i></button>
+                                    <a href="/camera/{{ cam.id }}/editar" class="btn btn-outline-primary" title="Editar"><i class="bi bi-pencil"></i></a>
+                                    <form action="/camera/{{ cam.id }}/excluir" method="post" class="d-inline" onsubmit="return confirm('Tem certeza?');"><button type="submit" class="btn btn-outline-danger" title="Excluir"><i class="bi bi-trash"></i></button></form>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="camera-list__status-tags">
+                            <span>Sensibilidade: <span class="badge bg-warning text-dark">{{ cam.motion_threshold|sensitivity }}</span></span>
+                            {% if cam.record_enabled %}<span class="badge bg-danger" title="Gravação Contínua"><i class="bi bi-record-circle"></i> REC</span>{% endif %}
+                            {% if cam.detect_enabled %}<span class="badge bg-success" title="Detecção de Objetos (IA)"><i class="bi bi-robot"></i> IA ({{ cam.ia_fps }} FPS / {{ cam.ia_event_retention_days }}d)</span>{% endif %}
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}<p>Nenhuma câmera cadastrada.</p>{% endif %}
+            </div>
+        </div>
+    </div>
+    <!-- Card Adicionar Nova Câmera -->
+    <div class="col-lg-5">
+        <div class="card shadow-sm">
+            <div class="card-header"><strong>Adicionar Nova Câmera</strong></div>
+            <div class="card-body">
+                <form action="/cliente/{{ cliente.id }}/add_camera" method="post">
+                    <div class="row g-3">
+                        <div class="col-12"><label class="form-label">Nome</label><input type="text" name="nome" class="form-control" value="{{ suggested_cam_name }}" required></div>
+                        <div class="col-md-6"><label class="form-label">Resolução</label><select name="resolucao" class="form-select"><option>HD</option><option>Full HD</option><option>4K</option></select></div>
+                        <div class="col-md-6"><label class="form-label">Gravação Contínua (dias)</label><input type="number" name="dias_armazenamento" class="form-control" value="3" required></div>
+                        <div class="col-12"><hr><h6>Configurações de IA e Gravação</h6></div>
+                        <div class="col-12 d-flex align-items-center">
+                            <div class="form-check form-switch me-4"><input class="form-check-input" type="checkbox" name="record_enabled" value="True" id="recordSwitch" checked><label class="form-check-label" for="recordSwitch">Gravação Contínua</label></div>
+                            <div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="detect_enabled" value="True" id="detectSwitch" checked onchange="toggleIaFields(this.checked)"><label class="form-check-label" for="detectSwitch">Detecção de Objetos (IA)</label></div>
+                        </div>
+                        <div id="ia-fields-group">
+                            <div class="col-12 mt-3">
+                                <label for="ia_fps_slider" class="form-label">FPS para Detecção IA: <span id="ia_fps_value">15</span></label>
+                                <input type="range" class="form-range" min="1" max="30" step="1" value="15" id="ia_fps_slider" name="ia_fps" oninput="document.getElementById('ia_fps_value').textContent = this.value;">
+                            </div>
+                            <div class="col-12 mt-3">
+                                <label for="ia_event_retention_days" class="form-label">Retenção de Eventos de IA (dias)</label>
+                                <select name="ia_event_retention_days" id="ia_event_retention_days" class="form-select">
+                                    {% for i in range(1, 31) %}<option value="{{ i }}" {% if i == 7 %}selected{% endif %}>{{ i }} dia(s)</option>{% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-12 mt-3"><label class="form-label">Tipo de Detecção IA</label><div class="form-check"><input class="form-check-input" type="radio" name="detection_type" id="detecPadrao" value="padrao" onchange="toggleObjects(false)"><label class="form-check-label" for="detecPadrao">Padrão (Pessoa, Carro)</label></div><div class="form-check"><input class="form-check-input" type="radio" name="detection_type" id="detecObjetos" value="objetos" checked onchange="toggleObjects(true)"><label class="form-check-label" for="detecObjetos">Rastrear Objetos Específicos</label></div></div>
+                        <div id="object-list" class="col-12"><label class="form-label">Objetos</label><div class="d-flex flex-wrap">{% for obj in ['person','car','dog','cat','bicycle','motorcycle'] %}<div class="form-check me-3"><input class="form-check-input" type="checkbox" name="objects_to_track" value="{{ obj }}" id="obj_{{ obj }}" {% if obj in ['person', 'car'] %}checked{% endif %}><label class="form-check-label" for="obj_{{ obj }}">{{ obj|capitalize }}</label></div>{% endfor %}</div></div>
+                        <div class="col-12"><label class="form-label">Sensibilidade de Movimento (Gravação)</label><select name="motion_sensitivity" class="form-select"><option value="baixo">Baixa</option><option value="medio" selected>Média</option><option value="alto">Alta</option></select></div>
+                        <div class="col-12"><label class="form-label">Observação</label><input type="text" name="observacao" class="form-control"></div>
+                    </div>
+                    <div class="mt-4"><button type="submit" class="btn btn-success w-100">Adicionar Câmera</button></div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- Modal de Log -->
+<div class="modal fade" id="logModal" tabindex="-1"><div class="modal-dialog modal-xl"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Log de Sincronização</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body p-0"><pre id="log-content" style="background-color:#212529;color:#e9ecef;margin:0;padding:1rem;height:60vh;white-space:pre-wrap;word-wrap:break-word;"></pre></div><div class="modal-footer"><button type="button" class="btn btn-primary" data-bs-dismiss="modal">Fechar</button></div></div></div></div>
+{% endblock %}
+{% block scripts %}
+<script>
+function toggleObjects(show){document.getElementById('object-list').style.display=show?'block':'none'}
+function toggleIaFields(show){document.getElementById('ia-fields-group').style.display=show?'block':'none'}
+document.addEventListener('DOMContentLoaded',()=>{const clienteId={{cliente.id}};const statusBadge=document.getElementById('status-badge');const frigateLinkSpan=document.getElementById('frigate-link-span');const syncButton=document.getElementById('sync-button');const logModalEl=document.getElementById('logModal');const logContent=document.getElementById('log-content');async function fetchStatus(){try{const r=await fetch('/cliente/'+clienteId+'/status');const d=await r.json();const s={'rodando':{text:'Ativo',class:'bg-success'},'pendente':{text:'Pendente',class:'bg-warning text-dark'},'nao_criado':{text:'Inativo',class:'bg-secondary'},'erro':{text:'Erro',class:'bg-danger'}};const i=s[d.status]||s['erro'];statusBadge.textContent=i.text;statusBadge.className='badge fs-6 '+i.class;if(d.status==='rodando'&&d.frigate_port){const url='http://'+window.location.hostname+':'+d.frigate_port;frigateLinkSpan.innerHTML='<a href="'+url+'" target="_blank">'+url+'</a>';}else{frigateLinkSpan.textContent='--';}}catch(e ){console.error("Erro status:",e);}}fetchStatus();setInterval(fetchStatus,15000);logModalEl.addEventListener('show.bs.modal',()=>{if(syncButton.disabled)return;logContent.textContent='Iniciando conexão...\n';syncButton.disabled=true;syncButton.innerHTML='<span class="spinner-border spinner-border-sm"></span> Sincronizando...';const ws=new WebSocket((window.location.protocol==='https:'?'wss:':'ws:' )+'//'+window.location.host+'/ws/frigate_manage/'+clienteId);ws.onopen=()=>{logContent.textContent+="Conexão estabelecida. Aguardando logs...\n\n"};ws.onmessage=(e)=>{if(e.data.includes("<<<<<PROCESS_COMPLETE>>>>>")){logContent.textContent+="\n\nProcesso finalizado.";ws.close();}else{logContent.textContent+=e.data;logContent.scrollTop=logContent.scrollHeight;}};ws.onclose=()=>{syncButton.disabled=false;syncButton.innerHTML='<i class="bi bi-arrow-repeat"></i> Sincronizar Serviços';fetchStatus();};ws.onerror=(err)=>{logContent.textContent+='\n\n[ERRO] Não foi possível conectar.'};});toggleObjects(document.getElementById('detecObjetos').checked);toggleIaFields(document.getElementById('detectSwitch').checked);
+const videoPlayerModal=new bootstrap.Modal(document.getElementById('videoPlayerModal'));const videoPlayer=document.getElementById('videoPlayer');let hls=new Hls();document.querySelectorAll('.btn-play-stream').forEach(button=>{button.addEventListener('click',function(){const streamUrl=this.getAttribute('data-stream-url');if(Hls.isSupported()){hls.loadSource(streamUrl);hls.attachMedia(videoPlayer);}else if(videoPlayer.canPlayType('application/vnd.apple.mpegurl')){videoPlayer.src=streamUrl;}videoPlayerModal.show();});});document.getElementById('videoPlayerModal').addEventListener('hidden.bs.modal',()=>{hls.stopLoad();videoPlayer.pause();});});
+</script>
+{% endblock %}

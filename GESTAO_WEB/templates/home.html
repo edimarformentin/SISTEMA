@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Clientes{% endblock %}
+{% block content %}
+<h1 class="mb-4">Clientes</h1>
+{% if clientes %}
+<div class="list-group">
+    {% for cliente in clientes %}
+    <div class="list-group-item d-flex justify-content-between align-items-center mb-2 card flex-row p-3">
+        <a href="/cliente/{{ cliente.id }}" class="text-decoration-none text-dark flex-grow-1">
+            <div class="fw-bold">{{ cliente.nome }}</div>
+            <small class="text-muted">{{ cliente.cpf }}</small>
+        </a>
+        <div class="d-flex align-items-center">
+            <span class="badge bg-primary rounded-pill me-3">{{ cliente.cameras|length }} câmeras</span>
+            <div class="btn-group btn-group-sm">
+                <a href="/cliente/{{ cliente.id }}/editar" class="btn btn-outline-secondary" title="Editar Cliente"><i class="bi bi-pencil"></i></a>
+                <form action="/cliente/{{ cliente.id }}/excluir" method="post" class="d-inline" onsubmit="return confirm('Tem certeza que deseja excluir este cliente e todos os seus dados? Esta ação é irreversível.');">
+                    <button type="submit" class="btn btn-outline-danger" title="Excluir Cliente"><i class="bi bi-trash"></i></button>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-5 card">
+    <div class="card-body">
+        <p class="lead">Nenhum cliente cadastrado.</p>
+        <a href="/novo_cliente" class="btn btn-success btn-lg mt-3">Cadastrar Primeiro Cliente</a>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

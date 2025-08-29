@@ -1,0 +1,36 @@
+/* === Componente: Lista de Câmeras (camera-list) === */
+.camera-list {
+    /* O ul.list-group já cuida da maior parte */
+    padding-left: 0;
+    list-style: none;
+}
+
+.camera-list__item {
+    /* O li.list-group-item já cuida da maior parte */
+    padding: 1rem;
+}
+
+.camera-list__row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem; /* Adiciona um espaço entre os detalhes e os botões */
+}
+
+.camera-list__details {
+    flex-grow: 1; /* Faz com que esta div ocupe o espaço disponível */
+}
+
+.camera-list__name {
+    font-weight: 600;
+}
+
+.camera-list__actions {
+    flex-shrink: 0; /* Impede que os botões encolham */
+}
+
+.camera-list__status-tags {
+    margin-top: 0.75rem;
+    display: flex;
+    gap: 0.5rem; /* Adiciona espaço entre os badges de status */
+}

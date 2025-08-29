@@ -1,0 +1,333 @@
+{% extends "base.html" %}
+
+{% block title %}Eventos de {{ cliente.nome }}{% endblock %}
+
+{% block content %}
+<style>
+    .event-image {
+        aspect-ratio: 16/9; object-fit: cover; background-color: #eee;
+        cursor: pointer; transition: transform 0.2s ease-in-out;
+    }
+    .event-image:hover { transform: scale(1.03); }
+
+    #modalImageContainer {
+        overflow: hidden; cursor: grab; touch-action: none;
+        display: flex; align-items: center; justify-content: center;
+    }
+    #modalImage {
+        transition: transform 0.15s ease-out;
+        transform-origin: center center;
+        max-width: 100%; max-height: 100%;
+    }
+    .zoom-controls {
+        display: flex; align-items: center; gap: 0.5rem;
+    }
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="bi bi-camera-reels"></i> Eventos de IA - {{ cliente.nome }}</h1>
+    <a href="/cliente/{{ cliente.id }}" class="btn btn-secondary"><i class="bi bi-arrow-left"></i> Voltar para o Cliente</a>
+</div>
+
+{% if not eventos_por_camera %}
+<div class="text-center py-5 card"><div class="card-body">
+    <p class="lead">Nenhum evento de detecção de IA foi encontrado.</p>
+    <p class="text-muted">Verifique se a "Detecção de Objetos (IA)" está ativa nas câmeras.</p>
+</div></div>
+{% else %}
+    {% for cam_nome, eventos in eventos_por_camera.items() %}
+    <div class="card shadow-sm mb-4">
+        <div class="card-header"><h5 class="mb-0"><i class="bi bi-camera-video"></i> Câmera: {{ cam_nome }}</h5></div>
+        <div class="card-body"><div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 g-3">
+            {% for evento in eventos %}
+            <div class="col"><div class="card h-100">
+                <img src="{{ evento.url }}" class="card-img-top event-image"
+                     alt="Snapshot do evento"
+                     data-image-url="{{ evento.url }}"
+                     data-image-title="Evento: {{ evento.objeto | capitalize }} em {{ evento.data }} às {{ evento.hora }}"
+                     loading="lazy">
+                <div class="card-body p-2">
+                    <p class="card-text mb-1"><i class="bi bi-tag"></i> <strong>{{ evento.objeto | capitalize }}</strong></p>
+                    <p class="card-text small text-muted"><i class="bi bi-calendar-event"></i> {{ evento.data }} <i class="bi bi-clock ms-1"></i> {{ evento.hora }}</p>
+                </div>
+            </div></div>
+            {% endfor %}
+        </div></div>
+    </div>
+    {% endfor %}
+{% endif %}
+
+<!-- Modal Final com Controles de Zoom -->
+<div class="modal fade" id="imageViewerModal" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="imageViewerModalLabel">Visualizador de Evento</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0" id="modalImageContainer">
+        <img id="modalImage" src="" alt="Imagem do Evento">
+      </div>
+      <div class="modal-footer d-flex justify-content-between">
+         <a id="downloadButton" href="#" download class="btn btn-success"><i class="bi bi-download"></i> Baixar</a>
+         <div class="zoom-controls">
+            <button id="zoomOutBtn" class="btn btn-secondary btn-sm"><i class="bi bi-zoom-out"></i></button>
+            <input type="range" id="zoomSlider" class="form-range" min="1" max="5" step="0.1" value="1" style="width: 150px;">
+            <button id="zoomInBtn" class="btn btn-secondary btn-sm"><i class="bi bi-zoom-in"></i></button>
+         </div>
+         <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Fechar</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const modalEl = document.getElementById('imageViewerModal');
+    const imageViewerModal = new bootstrap.Modal(modalEl);
+    const modalImageContainer = document.getElementById('modalImageContainer');
+    const modalImage = document.getElementById('modalImage');
+    const downloadButton = document.getElementById('downloadButton');
+    const zoomSlider = document.getElementById('zoomSlider');
+    const zoomInBtn = document.getElementById('zoomInBtn');
+    const zoomOutBtn = document.getElementById('zoomOutBtn');
+
+    let scale = 1, isPanning = false, start = { x: 0, y: 0 }, translate = { x: 0, y: 0 };
+
+    function applyTransform() {
+        const containerRect = modalImageContainer.getBoundingClientRect();
+        const imageRect = modalImage.getBoundingClientRect();
+        const maxTranslateX = (imageRect.width * scale - containerRect.width) / 2;
+        const maxTranslateY = (imageRect.height * scale - containerRect.height) / 2;
+
+        translate.x = Math.max(-maxTranslateX, Math.min(maxTranslateX, translate.x));
+        translate.y = Math.max(-maxTranslateY, Math.min(maxTranslateY, translate.y));
+
+        modalImage.style.transform = `translate(${translate.x}px, ${translate.y}px) scale(${scale})`;
+    }
+
+    function updateZoom(newScale) {
+        scale = Math.max(1, Math.min(5, newScale));
+        zoomSlider.value = scale;
+        applyTransform();
+    }
+
+    function resetZoom() {
+        translate = { x: 0, y: 0 };
+        updateZoom(1);
+    }
+
+    document.querySelectorAll('.event-image').forEach(image => {
+        image.addEventListener('click', function () {
+            modalImage.src = this.dataset.imageUrl;
+            document.getElementById('imageViewerModalLabel').textContent = this.dataset.imageTitle;
+            downloadButton.href = this.dataset.imageUrl;
+            downloadButton.download = `evento_${new Date().toISOString().split('T')[0]}.jpg`;
+            resetZoom();
+            imageViewerModal.show();
+        });
+    });
+
+    modalImageContainer.addEventListener('wheel', e => {
+        e.preventDefault();
+        updateZoom(scale - e.deltaY * 0.005);
+    }, { passive: false });
+
+    modalImageContainer.addEventListener('mousedown', e => {
+        if (scale > 1) {
+            e.preventDefault();
+            isPanning = true;
+            start = { x: e.clientX - translate.x, y: e.clientY - translate.y };
+            modalImageContainer.style.cursor = 'grabbing';
+        }
+    });
+
+    window.addEventListener('mousemove', e => {
+        if (isPanning) {
+            e.preventDefault();
+            translate.x = e.clientX - start.x;
+            translate.y = e.clientY - start.y;
+            applyTransform();
+        }
+    });
+
+    window.addEventListener('mouseup', () => {
+        if (isPanning) {
+            isPanning = false;
+            modalImageContainer.style.cursor = 'grab';
+        }
+    });
+
+    zoomSlider.addEventListener('input', e => updateZoom(parseFloat(e.target.value)));
+    zoomInBtn.addEventListener('click', () => updateZoom(scale + 0.2));
+    zoomOutBtn.addEventListener('click', () => updateZoom(scale - 0.2));
+    modalEl.addEventListener('hidden.bs.modal', resetZoom);
+});
+</script>
+{% endblock %}
+
+<!-- ========== Modal de Vídeo de Evento (injetado) ========== -->
+<div id="eventVideoModal" class="fixed inset-0 hidden items-center justify-center bg-black/70 z-50">
+  <div class="bg-white rounded-2xl max-w-4xl w-11/12 shadow-xl overflow-hidden">
+    <div class="flex items-center justify-between px-4 py-3 border-b">
+      <h3 class="text-lg font-semibold">Vídeo do Evento</h3>
+      <button id="closeEventVideoModal" class="px-3 py-1 rounded-md border">Fechar</button>
+    </div>
+    <div class="p-4">
+      <video id="eventVideoPlayer" class="w-full rounded-xl" controls preload="metadata"></video>
+      <p id="eventVideoHint" class="text-sm text-gray-500 mt-2"></p>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  // Seleciona cartões que tenham <img> de evento e injeta botão "Ver vídeo"
+  const grid = document.querySelector('#eventos-grid') || document.body;
+  const imgs = grid.querySelectorAll('img');
+
+  imgs.forEach((img) => {
+    try {
+      // evita pegar imagens que não são snapshots
+      const src = img.getAttribute('src') || '';
+      if (!src) return;
+      if (!/events\/.+\.jpg(\?.*)?$/i.test(src)) return;
+
+      // acha um contêiner razoável pra colocar o botão
+      const card = img.closest('.card, .shadow, .rounded, .event-card') || img.parentElement;
+      if (!card) return;
+
+      // evita duplicar
+      if (card.querySelector('.btn-ver-video')) return;
+
+      // cria botão
+      const btn = document.createElement('button');
+      btn.textContent = 'Ver vídeo';
+      btn.className = 'btn-ver-video mt-2 px-3 py-1 rounded-lg border shadow-sm hover:shadow transition text-sm';
+      btn.addEventListener('click', () => {
+        // constrói URL do vídeo trocando .jpg -> .mp4 (mantém querystring se existir)
+        const url = new URL(src, window.location.origin);
+        const qs = url.search; // preserva query
+        const videoUrl = url.pathname.replace(/\.jpg$/i, '.mp4') + qs;
+
+        // abre modal e carrega
+        const modal = document.getElementById('eventVideoModal');
+        const player = document.getElementById('eventVideoPlayer');
+        const hint = document.getElementById('eventVideoHint');
+        if (!modal || !player) return;
+
+        player.src = videoUrl;
+        hint.textContent = videoUrl;
+
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+
+        // tentativa de play; se 404, onerror do <video> mostra alerta
+        const onError = () => {
+          alert('Vídeo do evento ainda não disponível para este snapshot.');
+        };
+        player.addEventListener('error', onError, { once: true });
+
+        player.play().catch(() => {/* ok se o browser bloquear autoplay */});
+      });
+
+      // insere botão abaixo da imagem
+      img.insertAdjacentElement('afterend', btn);
+    } catch(e) {
+      // não quebra a página se algo der errado num card
+      console.warn('botão de vídeo: falha ao injetar em um cartão', e);
+    }
+  });
+
+  // fechar modal
+  const modal = document.getElementById('eventVideoModal');
+  const close = document.getElementById('closeEventVideoModal');
+  if (close && modal) {
+    close.addEventListener('click', () => {
+      const player = document.getElementById('eventVideoPlayer');
+      if (player) { player.pause(); player.removeAttribute('src'); player.load(); }
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    });
+  }
+  // fechar clicando fora
+  if (modal) {
+    modal.addEventListener('click', (ev) => {
+      if (ev.target === modal) {
+        const player = document.getElementById('eventVideoPlayer');
+        if (player) { player.pause(); player.removeAttribute('src'); player.load(); }
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      }
+    });
+  }
+})();
+</script>
+<!-- ========== Fim do bloco de vídeo de evento ========== -->
+
+<!-- ===== Patch: openEventVideo via /api/event-video (idempotente) ===== -->
+<script>
+(async function(){
+  function toMediaFiles(url) {
+    if (url.startsWith('/media_files/FRIGATE/')) return url;
+    if (url.startsWith('/FRIGATE/')) return url.replace('/FRIGATE/', '/media_files/FRIGATE/');
+    return url.replace('/FRIGATE/', '/media_files/FRIGATE/');
+  }
+  async function resolveVideoFromApi(jpgUrl) {
+    try {
+      const p = new URL(jpgUrl, window.location.origin);
+      const rel = p.pathname; // trabalhamos com path
+      const params = new URLSearchParams({ jpg: rel });
+      const r = await fetch(`/api/event-video?${params.toString()}`);
+      if (!r.ok) return null;
+      const data = await r.json();
+      return data?.url || null;
+    } catch(e) { return null; }
+  }
+  window.openEventVideo = async function(imgUrl){
+    const modal = document.getElementById('eventVideoModal');
+    const player = document.getElementById('eventVideoPlayer');
+    const hint = document.getElementById('eventVideoHint');
+    if (!modal || !player) return;
+
+    // 1) tenta API
+    let apiUrl = await resolveVideoFromApi(imgUrl);
+    if (apiUrl) {
+      player.src = apiUrl;
+      hint.textContent = 'Fonte: API /api/event-video';
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      player.play().catch(()=>{});
+      return;
+    }
+
+    // 2) fallback antigo: troca .jpg -> .mp4 e corrige prefixo
+    const jpgPath = imgUrl.replace(location.origin, '');
+    const mp4Path = jpgPath.replace(/\.jpg$/i, '.mp4');
+    const fixed = toMediaFiles(mp4Path);
+    player.src = fixed;
+    hint.textContent = 'Fonte: fallback direto (.mp4)';
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    player.play().catch(()=>{});
+  };
+  const closeBtn = document.getElementById('closeEventVideoModal');
+  if (closeBtn) closeBtn.addEventListener('click', () => {
+    const modal = document.getElementById('eventVideoModal');
+    const player = document.getElementById('eventVideoPlayer');
+    if (player) { player.pause(); player.removeAttribute('src'); player.load(); }
+    modal?.classList.add('hidden'); modal?.classList.remove('flex');
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      const modal = document.getElementById('eventVideoModal');
+      const player = document.getElementById('eventVideoPlayer');
+      if (player) { player.pause(); player.removeAttribute('src'); player.load(); }
+      modal?.classList.add('hidden'); modal?.classList.remove('flex');
+    }
+  });
+})();
+</script>
+<!-- ===== Fim do patch ===== -->

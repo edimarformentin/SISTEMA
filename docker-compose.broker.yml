@@ -1,0 +1,18 @@
+services:
+  broker:
+    image: rabbitmq:3.13-management
+    container_name: broker
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${BROKER_USER}
+      RABBITMQ_DEFAULT_PASS: ${BROKER_PASS}
+    ports:
+      - "${BROKER_PORT:-5672}:5672"
+      - "${BROKER_MAN_PORT:-15672}:15672"
+    volumes:
+      - ./BROKER/data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10

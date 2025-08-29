@@ -1,0 +1,52 @@
+services:
+  worker-person:
+    image: python:3.12-slim
+    container_name: worker-person
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      WORKER_ID: person-1
+      RENEW_EVERY_SEC: "5"
+      LEASE_EXT_SEC: "20"
+    working_dir: /app
+    volumes: [ "./WORKERS:/app" ]
+    command: bash -lc "pip -q install pika==1.3.2 psycopg2-binary==2.9.9 && python worker_person.py"
+    depends_on: [ broker ]
+
+  worker-car:
+    image: python:3.12-slim
+    container_name: worker-car
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      WORKER_ID: car-1
+      RENEW_EVERY_SEC: "5"
+      LEASE_EXT_SEC: "20"
+    working_dir: /app
+    volumes: [ "./WORKERS:/app" ]
+    command: bash -lc "pip -q install pika==1.3.2 psycopg2-binary==2.9.9 && python worker_car.py"
+    depends_on: [ broker ]
+
+  events-ingestor:
+    image: python:3.12-slim
+    container_name: events-ingestor
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      WORKER_ID: events-1
+    working_dir: /app
+    volumes: [ "./WORKERS:/app" ]
+    command: bash -lc "pip -q install pika==1.3.2 psycopg2-binary==2.9.9 && python events_ingestor.py"
+    depends_on: [ broker ]
+
+  lease-janitor:
+    image: python:3.12-slim
+    container_name: lease-janitor
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      WORKER_ID: janitor-1
+      JANITOR_INTERVAL: "5"
+    working_dir: /app
+    volumes: [ "./WORKERS:/app" ]
+    command: bash -lc "pip -q install psycopg2-binary==2.9.9 && python lease_janitor.py"

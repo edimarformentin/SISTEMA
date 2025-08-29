@@ -1,0 +1,9 @@
+logLevel: info
+api: yes
+
+paths:
+  all:
+    # Permite que qualquer um publique e leia streams por padrão
+    # Em produção, considere adicionar autenticação aqui
+    source: publisher
+    # Em produção, considere adicionar autenticação aqui

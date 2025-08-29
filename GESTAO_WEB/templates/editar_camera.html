@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Editar {{ camera.nome }}{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card shadow-sm">
+            <div class="card-header"><h3><i class="bi bi-camera-video"></i> Editando Câmera: {{ camera.nome }}</h3></div>
+            <div class="card-body">
+                <form id="edit-camera-form" action="/camera/{{ camera.id }}/editar" method="post">
+                    <div class="row g-3">
+                        <div class="col-12"><label class="form-label">Nome</label><input type="text" name="nome" class="form-control" value="{{ camera.nome }}" required></div>
+                        <div class="col-md-6"><label class="form-label">Resolução</label><select name="resolucao" class="form-select">{% for res in ['HD', 'Full HD', '4K'] %}<option {% if camera.resolucao == res %}selected{% endif %}>{{ res }}</option>{% endfor %}</select></div>
+                        <div class="col-md-6"><label class="form-label">Gravação Contínua (dias)</label><input type="number" name="dias_armazenamento" class="form-control" value="{{ camera.dias_armazenamento }}" required></div>
+                        <div class="col-12"><hr><h6>Configurações de IA e Gravação</h6></div>
+                        <div class="col-12 d-flex align-items-center">
+                            <div class="form-check form-switch me-4"><input class="form-check-input" type="checkbox" name="record_enabled" value="True" id="recordSwitch" {% if camera.record_enabled %}checked{% endif %}><label class="form-check-label" for="recordSwitch">Gravação Contínua</label></div>
+                            <div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="detect_enabled" value="True" id="detectSwitch" {% if camera.detect_enabled %}checked{% endif %} onchange="toggleIaFields(this.checked)"><label class="form-check-label" for="detectSwitch">Detecção de Objetos (IA)</label></div>
+                        </div>
+                        <div id="ia-fields-group">
+                            <div class="col-12 mt-3">
+                                <label for="ia_fps_slider" class="form-label">FPS para Detecção IA: <span id="ia_fps_value">{{ camera.ia_fps }}</span></label>
+                                <input type="range" class="form-range" min="1" max="30" step="1" value="{{ camera.ia_fps }}" id="ia_fps_slider" name="ia_fps" oninput="document.getElementById('ia_fps_value').textContent = this.value;">
+                            </div>
+                            <div class="col-12 mt-3">
+                                <label for="ia_event_retention_days" class="form-label">Retenção de Eventos de IA (dias)</label>
+                                <select name="ia_event_retention_days" id="ia_event_retention_days" class="form-select">
+                                    {% for i in range(1, 31) %}<option value="{{ i }}" {% if i == camera.ia_event_retention_days %}selected{% endif %}>{{ i }} dia(s)</option>{% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-12 mt-3"><label class="form-label">Tipo de Detecção IA</label><div class="form-check"><input class="form-check-input" type="radio" name="detection_type" id="detecPadrao" value="padrao" {% if camera.objects_to_track == 'padrao' or not camera.objects_to_track %}checked{% endif %} onchange="toggleObjects(false)"><label class="form-check-label" for="detecPadrao">Padrão (Pessoa, Carro)</label></div><div class="form-check"><input class="form-check-input" type="radio" name="detection_type" id="detecObjetos" value="objetos" {% if camera.objects_to_track and camera.objects_to_track != 'padrao' %}checked{% endif %} onchange="toggleObjects(true)"><label class="form-check-label" for="detecObjetos">Rastrear Objetos Específicos</label></div></div>
+                        <div id="object-list" class="col-12"><label class="form-label">Objetos</label><div class="d-flex flex-wrap">{% set tracked_objects = camera.objects_to_track.split(',') %}{% for obj in ['person','car','dog','cat','bicycle','motorcycle'] %}<div class="form-check me-3"><input class="form-check-input" type="checkbox" name="objects_to_track" value="{{ obj }}" id="obj_{{ obj }}" {% if obj in tracked_objects %}checked{% endif %}><label class="form-check-label" for="obj_{{ obj }}">{{ obj|capitalize }}</label></div>{% endfor %}</div></div>
+                        <div class="col-12"><label class="form-label">Sensibilidade de Movimento (Gravação)</label><select name="motion_sensitivity" class="form-select">{% set smap={50:'baixo',25:'medio',10:'alto'}%}{% for val,name in {'baixo':'Baixa','medio':'Média','alto':'Alta'}.items() %}<option value="{{ val }}" {% if smap[camera.motion_threshold]==val %}selected{% endif %}>{{ name }}</option>{% endfor %}</select></div>
+                        <div class="col-12"><label class="form-label">Observação</label><input type="text" name="observacao" class="form-control" value="{{ camera.observacao }}"></div>
+                    </div>
+                    <div class="mt-4 d-flex justify-content-between"><a href="/cliente/{{ camera.cliente_id }}" class="btn btn-secondary">Cancelar</a><button type="submit" class="btn btn-primary">Salvar Alterações</button></div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function toggleObjects(show){document.getElementById('object-list').style.display=show?'block':'none'}
+function toggleIaFields(show){document.getElementById('ia-fields-group').style.display=show?'block':'none'}
+document.addEventListener('DOMContentLoaded',()=>{
+    toggleObjects(document.getElementById('detecObjetos').checked);
+    toggleIaFields(document.getElementById('detectSwitch').checked);
+
+    const form = document.getElementById('edit-camera-form');
+    const retentionSelect = document.getElementById('ia_event_retention_days');
+    // Armazena o valor original como um número
+    const originalRetention = parseInt(retentionSelect.value, 10);
+
+    form.addEventListener('submit', function(event) {
+        const newRetention = parseInt(retentionSelect.value, 10);
+
+        // A condição agora é: o valor mudou E o novo valor é MENOR que o original
+        if (newRetention < originalRetention) {
+            const confirmation = confirm(`Você está REDUZINDO o período de retenção para ${newRetention} dia(s).\n\nTodos os eventos de IA mais antigos que isso serão apagados imediatamente após salvar.\n\nDeseja continuar?`);
+            if (!confirmation) {
+                event.preventDefault(); // Cancela o envio do formulário
+            }
+        }
+    });
+});
+</script>
+{% endblock %}

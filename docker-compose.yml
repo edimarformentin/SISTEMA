@@ -1,0 +1,50 @@
+services:
+  banco:
+    image: postgres:16
+    container_name: sistema-banco
+    env_file: .env
+    volumes:
+      - ./BANCO/data:/var/lib/postgresql/data
+      - ./BANCO/init:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    restart: always
+    networks:
+      - sistema_network
+
+  gestao_web:
+    build:
+      context: ./GESTAO_WEB
+    container_name: sistema-gestao-web
+    env_file: .env
+    environment:
+      - FRIGATE_HOST_PATH=/home/edimar/SISTEMA/FRIGATE
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./GESTAO_WEB:/code
+      - ./FRIGATE:/code/media_files/FRIGATE
+    ports:
+      - "8000:8000"
+    depends_on:
+      - banco
+      - mediamtx
+    restart: always
+    networks:
+      - sistema_network
+
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    container_name: sistema-mediamtx
+    volumes:
+      - ./MEDIAMTX/mediamtx.yml:/mediamtx.yml
+    ports:
+      - "1935:1935" # RTMP
+      - "8554:8554" # RTSP
+      - "8888:8888" # HLS
+    restart: always
+    networks:
+      - sistema_network
+
+networks:
+  sistema_network:
+    driver: bridge
